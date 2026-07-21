@@ -34,7 +34,7 @@ const defaults = {
   graceUsed: false, lastCountedDate: null, startDate: null, preview: false,
   energy: 3, blockers: '', checkin: null, theme: 'auto', accent: 'iris', sounds: true, focusLabel: '',
   tasks: [], holds: [], memories: [], morningSeenDate: '', closedDate: '', closeNote: '', rescueStartedAt: 0,
-  goal: null, goalDraft: null, currencyCode: 'INR', daySummaries: {}
+  goal: null, goalDraft: null, currencyCode: 'INR', daySummaries: {}, tourSeen: false, tourActive: false, tourStep: 0
 };
 let state = { ...defaults, ...load() };
 state.daySummaries = state.daySummaries && typeof state.daySummaries === 'object' ? state.daySummaries : {};
@@ -761,6 +761,28 @@ function coreNav(activeView = state.view) {
   const items = [['today', 'Today'], ['journal', 'Journal'], ['stats', 'Stats'], ['tasks', 'Tasks']];
   return `<nav class="core-nav" aria-label="Main navigation">${items.map(([view, label]) => `<button class="${activeView === view ? 'active' : ''}" data-nav="${view}">${label}</button>`).join('')}</nav>`;
 }
+const tourSteps = [
+  { selector: '.today-greeting', kicker: 'START HERE', title: 'Your day, at a glance.', body: 'This is home. Your intention, progress, and next useful block all meet here.' },
+  { selector: '.block-card', kicker: 'ONE BLOCK', title: 'Open the next thing.', body: 'Tap this card to enter Live Block. DAY ONE keeps the decision small so you can begin.' },
+  { selector: '.mini-stat[data-nav="tasks"]', kicker: 'TASKS', title: 'Give work somewhere to land.', body: 'Add tasks here and assign them to a block. The day carries the details for you.' },
+  { selector: '.mini-stat[data-nav="journal"]', kicker: 'JOURNAL', title: 'Keep the evidence.', body: 'After a block, answer one question. Your notes and optional proof become a readable day.' },
+  { selector: '[data-calm]', kicker: 'CALM LAYER', title: 'Make room when life moves.', body: 'Set an intention, protect fixed time, and soften the plan when your energy is low.' },
+  { selector: '.streak-pill', kicker: 'STREAK', title: 'Notice the return.', body: 'Streaks reward showing up, not a perfect line. Tap here whenever you want the quiet card.' },
+  { selector: '.today-tools .icon-btn[data-nav="settings"]', kicker: 'SETTINGS', title: 'Make it yours.', body: 'Notifications, appearance, backup, demo data, export, and reset all live here.' },
+  { selector: '.core-nav', kicker: 'ALWAYS WITH YOU', title: 'Move through the day.', body: 'Today, Journal, Stats, and Tasks stay one tap away. You are ready to begin.' }
+];
+function tourOverlay() {
+  const step = tourSteps[Math.min(tourSteps.length - 1, Math.max(0, Number(state.tourStep) || 0))];
+  const last = (Number(state.tourStep) || 0) >= tourSteps.length - 1;
+  const placeTop = [1, 2, 3, 7].includes(Number(state.tourStep) || 0);
+  return `<div class="tour-overlay" role="dialog" aria-modal="true" aria-label="DAY ONE tour"><div class="tour-scrim"></div><section class="tour-card ${placeTop ? 'tour-card-top' : ''}"><div class="tour-progress"><span>${String((Number(state.tourStep) || 0) + 1).padStart(2, '0')} / ${String(tourSteps.length).padStart(2, '0')}</span><button data-tour-skip>Skip tour</button></div><div class="tour-kicker">${step.kicker}</div><h2>${step.title}</h2><p>${step.body}</p><button class="tour-next" data-tour-next>${last ? 'Start my day' : 'Next'} <span aria-hidden="true">→</span></button></section></div>`;
+}
+function applyTourFocus() {
+  document.querySelectorAll('.tour-focus').forEach(element => element.classList.remove('tour-focus'));
+  if (!state.tourActive || state.view !== 'today') return;
+  const selector = tourSteps[Math.min(tourSteps.length - 1, Math.max(0, Number(state.tourStep) || 0))]?.selector;
+  document.querySelector(selector)?.classList.add('tour-focus');
+}
 function applyAppearance() { document.documentElement.dataset.appearanceTheme = state.theme || 'auto'; document.documentElement.dataset.appearanceAccent = state.accent || 'iris'; document.documentElement.classList.toggle('gentle', Number(state.energy) <= 2); }
 function recoverTransientView() { if (['checkin', 'celebrate'].includes(state.view)) { state.view = 'today'; state.checkinAnswered = false; save(); } }
 function render() {
@@ -776,7 +798,8 @@ function render() {
   const markup = sheetBase
     ? `${screens[sheetBase]()}<div class="sheet-backdrop ${viewChanged ? 'sheet-enter' : ''}" data-sheet-dismiss></div>${view().replace('class="sheet ', `class="sheet ${viewChanged ? 'sheet-enter ' : ''}`)}`
     : view().replace(/<(main|div) class="/, `<$1 class="${viewChanged ? 'screen-enter ' : ''}`);
-  document.querySelector('#app').innerHTML = coreNavViews.has(displayView) ? `${markup}${coreNav(displayView)}` : markup;
+  const navMarkup = coreNavViews.has(displayView) ? coreNav(displayView) : '';
+  document.querySelector('#app').innerHTML = `${markup}${navMarkup}${state.tourActive && displayView === 'today' ? tourOverlay() : ''}`;
   if (displayView === 'today') {
     document.querySelector('[data-streak]')?.setAttribute('aria-label', 'Open streak');
     document.querySelector('[data-calm]')?.setAttribute('aria-label', 'Open calm');
@@ -784,6 +807,7 @@ function render() {
     document.querySelector('[data-nav="settings"]')?.setAttribute('aria-label', 'Open settings');
   }
   wire();
+  applyTourFocus();
   if (state.view === 'daystory') ensureDaySummary(state.statsDate || today());
   if (viewChanged) window.scrollTo(0, 0);
   lastRenderedView = state.view;
@@ -962,7 +986,7 @@ function bindGoalOnboardingControls() {
 }
 
 function wire() {
-  document.querySelectorAll('[data-nav]').forEach(button => button.onclick = () => { if (button.dataset.nav === 'onboarding') { state.onbStep = 1; state.onbMotion = 'boot'; state.onboarded = false; } if (button.dataset.nav === 'letter') state.letterFrom = state.view; state.view = button.dataset.nav; save(); render(); });
+  document.querySelectorAll('[data-nav]').forEach(button => button.onclick = () => { const fromMorning = state.view === 'morning'; if (button.dataset.nav === 'onboarding') { state.onbStep = 1; state.onbMotion = 'boot'; state.onboarded = false; } if (button.dataset.nav === 'letter') state.letterFrom = state.view; if (fromMorning && button.dataset.nav === 'today' && !state.tourSeen) { state.tourActive = true; state.tourStep = 0; } state.view = button.dataset.nav; save(); render(); });
   document.querySelectorAll('[data-sheet-dismiss]').forEach(button => button.onclick = dismissSheet);
   document.querySelectorAll('[data-onb-next]').forEach(button => button.onclick = () => { state.onbStep = Number(button.dataset.onbNext); state.onbMotion = 'step'; if (state.onbStep === 3) state.blocks = generateBlocks(); save(); render(); });
   bindGoalOnboardingControls();
@@ -983,7 +1007,9 @@ function wire() {
   document.querySelectorAll('[data-ci-log]').forEach(button => button.onclick = () => { if (!button.classList.contains('off')) completeCheckin(); });
   document.querySelectorAll('[data-celebrate-next]').forEach(button => button.onclick = () => { state.view = 'today'; save(); render(); });
   document.querySelectorAll('[data-morning-open]').forEach(button => button.onclick = () => { state.view = 'morning'; render(); });
-  document.querySelectorAll('[data-morning-continue]').forEach(button => button.onclick = () => { state.intention = document.querySelector('#morning-intention')?.value.trim() || state.intention; state.morningSeenDate = today(); state.view = 'today'; save(); render(); });
+  document.querySelectorAll('[data-morning-continue]').forEach(button => button.onclick = () => { state.intention = document.querySelector('#morning-intention')?.value.trim() || state.intention; state.morningSeenDate = today(); if (!state.tourSeen) { state.tourActive = true; state.tourStep = 0; } state.view = 'today'; save(); render(); });
+  document.querySelectorAll('[data-tour-next]').forEach(button => button.onclick = () => { if ((Number(state.tourStep) || 0) >= tourSteps.length - 1) { state.tourActive = false; state.tourSeen = true; state.tourStep = 0; } else state.tourStep = (Number(state.tourStep) || 0) + 1; save(); render(); });
+  document.querySelectorAll('[data-tour-skip]').forEach(button => button.onclick = () => { state.tourActive = false; state.tourSeen = true; state.tourStep = 0; save(); render(); });
   document.querySelectorAll('[data-close-day]').forEach(button => button.onclick = () => { state.view = 'close'; render(); });
   document.querySelectorAll('[data-close-feeling]').forEach(button => button.onclick = () => { state.closeNote = document.querySelector('#close-note')?.value || state.closeNote || ''; state.closeFeeling = button.dataset.closeFeeling; save(); render(); });
   document.querySelector('#close-note')?.addEventListener('input', event => { state.closeNote = event.target.value; save(); });

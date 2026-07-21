@@ -4,7 +4,23 @@ const fallbackQuestions = [
   'Did the work move forward?',
   'What is true now that was not true before?',
   'What got in the way, if anything?',
-  'Can you name the part you showed up for?'
+  'Can you name the part you showed up for?',
+  'What did you make easier for tomorrow?',
+  'Did the first move happen?',
+  'Which part felt most useful?',
+  'Where did you lose the thread?',
+  'What changed because you stayed with it?',
+  'Did the block get the right amount of attention?',
+  'What did you learn by doing the work?',
+  'Was there a smaller next step hiding inside it?',
+  'What can you point to that exists now?',
+  'Did the plan fit the energy you had?',
+  'What would you leave exactly as it is?',
+  'Which detail deserves to be remembered?',
+  'Did you return after drifting?',
+  'What did you choose not to carry forward?',
+  'Where did the block end honestly?',
+  'What is one line you can write about this block?'
 ];
 const focusPlans = {
   Job: ['Wake and reset', 'Applications', 'Skill practice', 'Break and walk', 'Follow-ups', 'Admin', 'Close the day'],
@@ -728,7 +744,7 @@ function closeDaySheet() {
 function checkinViewDiscipline() {
   const answered = Boolean(state.checkinAnswered);
   const source = state.checkin?.source === 'gpt-5.6' ? 'GPT-5.6' : 'OFFLINE';
-  return `<main class="checkin-page"><div class="ci-wash"></div><div class="ci-content"><div class="ci-tag">${source}</div><h1 class="ci-q">${esc(state.checkin?.question || fallbackQuestions[0])}</h1><div class="ci-answers">${['Yes', 'Not really'].map(answer => `<button class="${state.checkinAnswer === answer ? 'selected' : ''}" data-ci-answer="${answer}">${answer}</button>`).join('')}</div>${answered ? `<textarea class="ci-input ci-note-reveal" id="ci-note" placeholder="add a note (optional)">${esc(state.checkinNote || '')}</textarea><div class="ci-bottom"><button class="ci-log" data-ci-log>Log it</button></div>` : ''}</div></main>`;
+  return `<main class="checkin-page"><div class="ci-wash"></div><div class="ci-content"><div class="ci-tag">${source}</div><h1 class="ci-q">${esc(state.checkin?.question || fallbackQuestions[0])}</h1><div class="ci-answers">${['Yes', 'Partly', 'Not today'].map(answer => `<button class="${state.checkinAnswer === answer ? 'selected' : ''}" data-ci-answer="${answer}">${answer}</button>`).join('')}</div>${answered ? `<textarea class="ci-input ci-note-reveal" id="ci-note" placeholder="add a note (optional)">${esc(state.checkinNote || '')}</textarea><div class="ci-bottom"><button class="ci-log" data-ci-log>Log it</button></div>` : ''}</div></main>`;
 }
 
 const sheetBaseViews = { jcompose: 'journal', close: 'today' };

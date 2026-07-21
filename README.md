@@ -4,7 +4,7 @@ DAY ONE is a quiet daily-discipline PWA. It turns a person's answers into a fixe
 
 ## Try it
 
-There is no hosted demo URL checked into this repository yet. Run it locally with the commands below. The app installs as a PWA when opened from a supported browser and added to a phone home screen.
+Live demo: [day-one-pwa.pages.dev](https://day-one-pwa.pages.dev). The current deployment is also available at [8f095269.day-one-pwa.pages.dev](https://8f095269.day-one-pwa.pages.dev). The app installs as a PWA when opened from a supported browser and added to a phone home screen.
 
 ## Run it locally
 

@@ -558,6 +558,20 @@ body *{font-family:var(--font-sans)!important;font-variant-numeric:tabular-nums}
 .checkin-page .ci-bottom{width:100%;margin:12px 0 0!important}.checkin-page .ci-bottom .ci-log{display:block!important;width:100%!important}.tasks-page .tasks-hero>span{text-transform:none!important}.tasks-page .task-secondary-actions{display:flex;gap:16px;margin-top:20px}.tasks-page .task-secondary-actions button{padding:0!important;border:0!important;background:transparent!important;color:color-mix(in srgb,var(--ink) 68%,transparent)!important;font-size:13px!important;box-shadow:none!important}.stats-page .split-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;background:transparent!important;overflow:visible!important}.stats-page .split-stats>div{min-width:0;padding:16px 12px!important}.stats-page .score-card h2{font-family:var(--font-serif)!important}
 @media (prefers-reduced-motion:reduce){.sheet.sheet-enter{animation:sheet-fade .15s ease-out both!important}.sheet.is-closing{animation:sheet-fade-out .15s ease-in both!important;transform:none!important}}
 
+/* Full-screen completion flows should feel finished, not vertically stranded. */
+.celebrate-page{padding:32px 24px calc(env(safe-area-inset-bottom) + 28px)}
+.celebrate-content{width:min(100%,360px)}
+.cel-kicker{margin-bottom:18px;color:var(--gray);font-size:10px;font-weight:800;letter-spacing:.16em}
+.cel-t{font-size:clamp(3.7rem,17vw,5.8rem)!important}
+.cel-s{margin:18px auto 0;max-width:25ch;font-size:15px}
+.cel-proof{display:grid;gap:7px;margin:34px auto 0;padding:16px 18px;border:1px solid var(--hairline);border-radius:18px;background:color-mix(in srgb,var(--card) 76%,transparent);text-align:left}
+.cel-proof span{color:var(--gray);font-size:10px;font-weight:800;letter-spacing:.12em}.cel-proof strong{font-size:16px}.cel-proof small{color:var(--gray);font-size:12px}
+.cel-hint{display:inline-flex;align-items:center;gap:8px;margin-top:34px!important;padding:12px 16px;border-radius:999px;background:var(--ink);color:var(--canvas);font-size:12px;font-weight:800;letter-spacing:.08em}.cel-hint span{font-size:16px;line-height:1}
+.checkin-page .ci-content{min-height:0!important;padding-top:calc(env(safe-area-inset-top) + 48px)!important;padding-bottom:calc(env(safe-area-inset-bottom) + 28px)!important}
+.checkin-page .ci-tag{margin-bottom:18px!important}.checkin-page .ci-lede{max-width:30ch;margin:14px auto 0;color:var(--gray);font-size:13px;line-height:1.45;text-align:center}.checkin-page .ci-answers{margin-top:28px!important;padding-top:0!important}.checkin-page .ci-bottom{margin-top:12px!important}
+@media(max-width:390px){.celebrate-page{padding-inline:20px}.cel-proof{margin-top:28px}.cel-hint{margin-top:28px!important}}
+@media(prefers-reduced-motion:reduce){.cel-hint:active{transform:none!important}}
+
 /* Desktop sheets use the whole canvas, then center one calm reading column. */
 .sheet{width:100%!important}
 @media (min-width:641px){

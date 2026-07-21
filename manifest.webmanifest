@@ -1,0 +1,10 @@
+{
+  "name": "DAY ONE",
+  "short_name": "DAY ONE",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f5f0",
+  "theme_color": "#f7f5f0",
+  "description": "A quiet daily discipline app for showing up.",
+  "icons": []
+}

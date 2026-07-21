@@ -556,18 +556,45 @@ function tasksViewWithDiscipline() {
 }
 
 function statsHistoryRecord(date) { return state.history.find(record => record.date === date) || { date, won: false, goalEvents: [] }; }
-function statsDayCells() {
-  return Array.from({ length: 84 }, (_, offset) => {
-    const date = journalDay(offset); const record = statsHistoryRecord(date); const entries = state.journal.filter(entry => entry.date === date); const effort = (record.goalEvents || []).length;
-    const intensity = Math.min(4, effort ? Math.max(1, Math.round(effort / 2)) : record.won ? 2 : entries.length ? 1 : 0);
-    return `<button class="heat-cell heat-${intensity}" data-stats-day="${date}" aria-label="Open ${new Date(`${date}T12:00:00`).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })} day story"><span></span></button>`;
-  }).reverse().join('');
+function dayKeptCount(date) {
+  const record = statsHistoryRecord(date); const events = Array.isArray(record.goalEvents) ? record.goalEvents.length : 0;
+  if (events) return Math.min(7, events); if (record.won) return 7;
+  return Math.min(7, state.journal.filter(entry => entry.date === date).length);
 }
-
+function dayEntries(date) { return state.journal.filter(entry => entry.date === date).slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)); }
+function dayOpener(date) {
+  const kept = dayKeptCount(date); const note = dayEntries(date).find(entry => entry.note)?.note;
+  if (note) return note; if (!kept) return 'The page stayed blank.';
+  return ['A day that held its shape.', 'Started with the smallest useful thing.', 'Quiet work still moved the day forward.'][date.charCodeAt(date.length - 1) % 3];
+}
+function feedPhoto(date) {
+  const kept = dayKeptCount(date); const photo = dayEntries(date).find(entry => entry.photo)?.photo;
+  if (!photo || kept < 4) return '';
+  const seed = date.split('-').reduce((sum, part) => sum + Number(part), 0);
+  return seed % 3 === 0 ? photo : '';
+}
+function blockNames() { return (state.blocks || []).map(block => ({ name: block.name || 'A block', time: block.time || '', first: block.firstMove || block.line || block.description || 'The smallest next action.' })); }
+function storyEvents(date) {
+  const entries = dayEntries(date); const kept = dayKeptCount(date); const names = blockNames();
+  const events = entries.map(entry => ({ time: entryTimestamp(entry), name: entry.block || 'A kept line', first: 'The block made room for one useful thing.', note: entry.note || '', photo: entry.photo || '', mood: entry.answer || '' }));
+  for (let index = events.length; index < kept; index += 1) { const block = names[index] || { name: 'A kept block', time: '', first: 'The next useful thing.' }; events.push({ time: block.time, name: block.name, first: block.first, note: '', photo: '', mood: '' }); }
+  return { kept: events, missed: names.slice(kept).concat(Array.from({ length: Math.max(0, 7 - kept - names.length) }, (_, index) => ({ name: `Block ${kept + names.length + index + 1}`, time: '', first: '' }))) };
+}
+function storyEventMarkup(event, missed = false) {
+  return `<article class="story-entry${missed ? ' story-missed' : ''}"><div class="story-time">${esc(event.time || '—')}</div><div class="story-entry-body"><span class="story-dot"></span><div><strong>${esc(event.name)}</strong>${event.first ? `<small>${esc(event.first)}</small>` : ''}${event.note ? `<p>${esc(event.note)}</p>` : ''}${event.photo ? `<figure><img src="${esc(event.photo)}" alt="Proof from ${esc(event.name)}" loading="lazy"><figcaption>Proof from this block</figcaption></figure>` : ''}${event.mood ? `<span class="story-mood">${esc(event.mood)}</span>` : ''}${missed ? '<small>Not kept. The day still counted.</small>' : ''}</div></div></article>`;
+}
+function statsDayCells() {
+  const dates = Array.from({ length: 84 }, (_, index) => journalDay(83 - index)); const labels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']; let grid = '';
+  for (let row = 0; row < 7; row += 1) { grid += `<span class="heat-weekday">${labels[row]}</span>`; for (let column = 0; column < 12; column += 1) { const date = dates[column * 7 + row]; const record = statsHistoryRecord(date); const entries = dayEntries(date); const effort = (record.goalEvents || []).length; const intensity = Math.min(4, effort ? Math.max(1, Math.round(effort / 2)) : record.won ? 2 : entries.length ? 1 : 0); const selected = (state.statsDate || today()) === date ? ' selected' : ''; grid += `<button class="heat-cell heat-${intensity}${selected}" data-stats-day="${date}" aria-label="Open ${new Date(`${date}T12:00:00`).toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })} day story"><span></span></button>`; } }
+  const months = Array.from({ length: 12 }, (_, column) => { const date = new Date(`${dates[column * 7]}T12:00:00`); const previous = column ? new Date(`${dates[(column - 1) * 7]}T12:00:00`) : null; return `<span>${!previous || date.getMonth() !== previous.getMonth() ? date.toLocaleDateString([], { month: 'short' }) : ''}</span>`; }).join('');
+  return `<div class="heat-grid">${grid}</div><div class="heat-month-row"><span></span>${months}</div>`;
+}
+function statsPreviewView(date) {
+  const day = new Date(`${date}T12:00:00`); const entries = dayEntries(date); const kept = dayKeptCount(date); const photo = entries.find(entry => entry.photo)?.photo || ''; return `<button class="stats-day-preview" data-story-preview="${date}"><div class="preview-date"><strong>${day.getDate()}</strong><span>${day.toLocaleDateString([], { month: 'short', weekday: 'long' })}</span></div><p>${esc(dayOpener(date))}</p>${photo ? `<img src="${esc(photo)}" alt="Proof from ${esc(date)}" loading="lazy">` : ''}<footer><span>${kept} / 7 blocks kept</span><span>${entries.filter(entry => entry.note).length} lines written &rsaquo;</span></footer></button>`;
+}
 function dayStoryView() {
-  const date = state.statsDate || today(); const record = statsHistoryRecord(date); const entries = state.journal.filter(entry => entry.date === date).slice().sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)); const day = new Date(`${date}T12:00:00`); const effort = (record.goalEvents || []).length; const earned = goalIsActive() && effort ? potFromHistory([record], state.goal, state.streak).total : 0;
-  const timeline = entries.length ? entries.map(entry => `<article class="story-entry"><div class="story-time">${entryTimestamp(entry) || 'A kept line'}</div><div class="story-entry-body"><span class="story-dot"></span><div><strong>${esc(entry.block || 'Journal')}</strong><small>${esc(entry.answer || 'Recorded')}</small>${entry.note ? `<p>${esc(entry.note)}</p>` : ''}${entry.photo ? `<figure><img src="${esc(entry.photo)}" alt="Proof from ${esc(entry.block || 'the day')}" loading="lazy"><figcaption>Proof from this block</figcaption></figure>` : ''}</div></div></article>`).join('') : '<p class="story-empty">The page stayed quiet. That is part of the record too.</p>';
-  return `<main class="day-story-page"><header class="day-story-top"><span>THE JOURNAL</span><button aria-label="Close day story" data-story-close>&times;</button></header><div class="day-story-content"><div class="story-kicker">${day.toLocaleDateString([], { weekday: 'long' }).toUpperCase()}</div><h1>${day.getDate()} <span>${day.toLocaleDateString([], { month: 'long' })}</span></h1><p class="story-date">${day.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</p><section class="story-summary"><div><span>BLOCKS KEPT</span><strong>${effort || (record.won ? 'A full day' : entries.length)}</strong></div><div><span>DAY</span><strong>${record.won ? 'Won' : entries.length ? 'Recorded' : 'Quiet'}</strong></div><div><span>GOAL EFFORT</span><strong>${earned ? money(earned) : '—'}</strong></div></section><section class="story-timeline"><div class="story-section-label">THE DAY, AS IT HAPPENED</div>${timeline}</section><button class="story-close-action" data-story-close>Back to this week</button></div></main>`;
+  const date = state.statsDate || today(); const day = new Date(`${date}T12:00:00`); const kept = dayKeptCount(date); const entries = dayEntries(date); const dayState = kept >= 4 ? 'Held' : kept ? 'In progress' : 'Quiet'; const events = storyEvents(date); const timeline = events.kept.map(event => storyEventMarkup(event)).join('') + events.missed.map(event => storyEventMarkup(event, true)).join('');
+  return `<main class="day-story-page"><header class="day-story-top"><span>THE JOURNAL</span><button aria-label="Close day story" data-story-close>&times;</button></header><div class="day-story-content"><div class="story-date-hero"><strong>${day.getDate()}</strong><span>${day.toLocaleDateString([], { month: 'long' }).toUpperCase()}<br>${day.toLocaleDateString([], { weekday: 'long' }).toUpperCase()}</span></div><p class="story-opener">${esc(dayOpener(date))}</p><section class="story-summary"><div><span>BLOCKS KEPT</span><strong>${kept} / 7</strong></div><div><span>DAY</span><strong>${dayState}</strong></div><div><span>LINES WRITTEN</span><strong>${entries.filter(entry => entry.note).length}</strong></div></section><section class="story-timeline"><div class="story-section-label">THE DAY, AS IT HAPPENED</div><div class="story-spine">${timeline || '<p class="story-empty">The page stayed blank.</p>'}</div></section><button class="story-close-action" data-story-close>Back to this week</button></div></main>`;
 }
 
 function statsPageViewDiscipline() {
@@ -599,6 +626,24 @@ function journalListViewDiscipline() {
   const summary = `${month} · ${monthEntries.length} ${monthEntries.length === 1 ? 'entry' : 'entries'} · mostly ${String(mostly).toLowerCase()}`;
   return `<main class="jlist-page"><header class="jlist-top"><div><strong>DAY ONE</strong><span>THE JOURNAL</span></div><button class="fab-sm" aria-label="Compose journal entry" data-nav="jcompose">+</button></header><div class="jlist-content"><div class="journal-summary"><span>${esc(summary)}</span><button data-j-see-all>See all</button></div><section class="journal-stack" data-j-stack aria-label="Journal day stack"><div class="stack-peek left"></div><article class="book-page"><div class="book-date"><strong>${current.getDate()}</strong><span>${current.toLocaleDateString([], { month: 'long' })} · ${current.toLocaleDateString([], { weekday: 'long' })}</span></div>${pageLines}<footer>${dayEntries.length ? 'DAY RECORDED' : 'A QUIET PAGE'}</footer></article><div class="stack-peek right"></div></section><section class="journal-day-group"><button class="journal-date-head" data-j-date="${date}">${date === today() ? 'Today' : current.toLocaleDateString([], { weekday: 'long' })}, ${current.toLocaleDateString([], { month: 'short', day: 'numeric' })}<span>›</span></button>${cards}</section><div class="strap" data-j-rail>${rail.map(({ item, key, selected, marked }) => `<button class="${selected ? 'selected' : ''} ${marked ? 'marked' : ''} ${item.getDay() === 1 ? 'monday' : ''}" data-j-date="${key}" aria-label="${item.toLocaleDateString([], { month: 'long', day: 'numeric' })}"><strong>${item.getDate()}</strong><i></i></button>`).join('')}</div></div></main>`;
 }
+
+function statsPageViewDiscipline() {
+  const total = state.blocks.length || 7; const done = state.blocks.filter(block => block.done).length; const score = Math.round(done / total * 100); const selectedDate = state.statsDate || today();
+  const story = done ? `${done} block${done === 1 ? '' : 's'} found a place today.` : 'There is still room to begin with one small block.';
+  return `<main class="stats-page"><div class="stats-blob"></div><header class="page-top"><span>DAY ONE</span></header><div class="page-content"><div class="task-kicker">THE WEEK, IN WORDS</div><h1 class="pg-title">This week.</h1><section class="score-card"><div class="score-progress"><strong>${score}</strong><span>today</span>${dayDots()}</div><div><h2>${score >= 70 ? 'The shape held.' : 'There is still a door open.'}</h2><p>Small completions count when they make the next one easier.</p></div></section><section class="week-story"><strong>What the week says</strong><p><span>${esc(story)}</span><span>${state.journal.length ? `${state.journal.length} lines make the week easier to remember.` : 'The book is ready for the first honest line.'}</span><span>${state.energy <= 2 ? 'A softer pace is part of the plan.' : 'The next useful thing is enough for now.'}</span></p></section><div class="split-stats"><div><strong>${state.streak}</strong><span>Days kept<br>without pressure</span></div><div><strong>${done}</strong><span>Deep work<br>protected today</span></div><div><strong>${state.journal.length}</strong><span>Notes<br>kept this week</span></div></div><div class="task-kicker">WHAT GOT IN THE WAY</div><div class="kill-list"><p class="stats-empty">No blockers logged this week.</p></div><section class="tip-card"><span>TOMORROW</span><strong>Leave one clear door open before bed.</strong></section><div class="heatmap"><div class="task-kicker">TWELVE WEEKS</div>${statsDayCells()}<small>quiet&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;full · tap a day to open its story</small></div>${statsPreviewView(selectedDate)}</div></main>`;
+}
+
+function journalFeedView() {
+  const dates = Array.from({ length: 21 }, (_, offset) => journalDay(20 - offset));
+  const rows = dates.map(date => {
+    const day = new Date(`${date}T12:00:00`); const entries = dayEntries(date); const kept = dayKeptCount(date); const photo = feedPhoto(date); const quiet = !kept;
+    const dots = Array.from({ length: 7 }, (_, index) => `<i class="${index < kept ? 'on' : ''}"></i>`).join('');
+    return `<button class="journal-feed-row${quiet ? ' quiet' : ''}" data-j-story-date="${date}"><span class="feed-date"><strong>${day.getDate()}</strong><small>${day.toLocaleDateString([], { weekday: 'short' }).toUpperCase()}</small></span><span class="feed-story"><span class="feed-line">${esc(dayOpener(date))}</span>${photo ? `<img src="${esc(photo)}" alt="Proof from ${esc(date)}" loading="lazy">` : ''}<span class="feed-dots">${dots}</span></span></button>`;
+  }).join('');
+  const month = new Date(`${dates.at(-1)}T12:00:00`).toLocaleDateString([], { month: 'long' });
+  return `<main class="jlist-page journal-story-feed"><header class="jlist-top"><div><strong>DAY ONE</strong><span>THE JOURNAL</span></div><button class="fab-sm" aria-label="Compose journal entry" data-nav="jcompose">+</button></header><div class="jlist-content"><div class="journal-feed-heading"><span>${month} · ${dates.length} days</span><strong>What stayed with you.</strong></div><section class="journal-feed" aria-label="Journal by day">${rows}</section></div></main>`;
+}
+function journalListViewDiscipline() { return journalFeedView(); }
 
 function journalComposeSheet() {
   const mood = state.jMood || '';
@@ -874,6 +919,7 @@ function wire() {
   document.querySelectorAll('[data-sc-save]').forEach(button => button.onclick = () => { const block = state.blocks.find(item => item.id === button.dataset.scSave); if (block) { block.time = document.querySelector(`[data-sc-time="${block.id}"]`).value; block.name = document.querySelector(`[data-sc-name="${block.id}"]`).value; save(); render(); } });
   document.querySelectorAll('[data-add-block]').forEach(button => button.onclick = () => { state.blocks.push({ id: `b${Date.now()}`, name: 'New block', time: '18:00', done: false, firstMove: 'Choose the smallest next action.' }); save(); render(); });
   document.querySelectorAll('[data-stats-day]').forEach(button => button.onclick = () => { state.statsDate = button.dataset.statsDay; state.view = 'daystory'; save(); render(); });
+  document.querySelectorAll('[data-j-story-date], [data-story-preview]').forEach(button => button.onclick = () => { state.statsDate = button.dataset.jStoryDate || button.dataset.storyPreview; state.view = 'daystory'; save(); render(); });
   document.querySelectorAll('[data-story-close]').forEach(button => button.onclick = () => { state.view = 'stats'; save(); render(); });
   document.querySelectorAll('[data-j-mood]').forEach(button => button.onclick = () => { state.jText = document.querySelector('#j-text')?.value || state.jText || ''; state.jMood = button.dataset.jMood; save(); render(); });
   document.querySelectorAll('[data-j-chip]').forEach(button => button.onclick = () => { const current = document.querySelector('#j-text')?.value || state.jText || ''; state.jText = current ? `${current}\n${button.dataset.jChip}` : button.dataset.jChip; save(); render(); document.querySelector('#j-text')?.focus(); });

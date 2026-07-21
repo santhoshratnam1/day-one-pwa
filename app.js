@@ -18,12 +18,16 @@ const defaults = {
   graceUsed: false, lastCountedDate: null, startDate: null, preview: false,
   energy: 3, blockers: '', checkin: null, theme: 'auto', accent: 'iris', sounds: true, focusLabel: '',
   tasks: [], holds: [], memories: [], morningSeenDate: '', closedDate: '', closeNote: '', rescueStartedAt: 0,
-  goal: null, goalDraft: null, currencyCode: 'INR'
+  goal: null, goalDraft: null, currencyCode: 'INR', daySummaries: {}
 };
 let state = { ...defaults, ...load() };
+state.daySummaries = state.daySummaries && typeof state.daySummaries === 'object' ? state.daySummaries : {};
 let timer;
 let lastRenderedView = null;
 let completingBlock = false;
+let journalCalendarMonth = today().slice(0, 7);
+let journalCalendarFilter = 'all';
+const daySummaryRequests = new Set();
 
 const launchParams = new URLSearchParams(location.search);
 if (launchParams.has('start')) {
@@ -645,6 +649,71 @@ function journalFeedView() {
 }
 function journalListViewDiscipline() { return journalFeedView(); }
 
+function calendarMonthParts(key = journalCalendarMonth) {
+  const [year, month] = String(key).split('-').map(Number);
+  return { year: year || new Date().getFullYear(), month: (month || 1) - 1 };
+}
+function calendarDateKey(year, month, day) { return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`; }
+function calendarMonthLabel(key) { const { year, month } = calendarMonthParts(key); return new Date(year, month, 1).toLocaleDateString([], { month: 'long', year: 'numeric' }); }
+function calendarMoveMonth(delta) {
+  const { year, month } = calendarMonthParts(); const moved = new Date(year, month + delta, 1);
+  journalCalendarMonth = `${moved.getFullYear()}-${String(moved.getMonth() + 1).padStart(2, '0')}`;
+}
+function summarySentence(text = '') { return String(text).split(/(?<=[.!?])\s+/)[0].trim() || text; }
+function localDaySummary(date) {
+  const kept = dayKeptCount(date); const entries = dayEntries(date); const names = blockNames().map(item => item.name); const firstKept = entries[0]?.block || names[0] || 'the first block';
+  const missed = names.slice(Math.min(kept, names.length)); const note = entries.find(entry => entry.note)?.note?.replace(/[\r\n]+/g, ' ').trim().slice(0, 180);
+  if (!kept) return `Nothing was kept on this day. ${names[0] || 'The first block'} did not happen, and the record stayed quiet.`;
+  const lines = [`You kept ${kept} of 7 blocks, beginning with ${firstKept}.`];
+  if (note) lines.push(`You wrote, “${note.replace(/[“”]/g, '').replace(/[.!?]+$/, '')}.”`);
+  if (missed.length) lines.push(`${missed[0]} was missed, while the rest of the day stayed visible.`);
+  else lines.push('Every planned block found a place in the day.');
+  return lines.join(' ');
+}
+function summaryCache(date) { return state.daySummaries?.[date] || null; }
+function daySummaryPayload(date) {
+  return {
+    mode: 'day', date, kept: dayKeptCount(date), total: 7,
+    blocks: blockNames().map(block => ({ name: block.name, time: block.time })),
+    entries: dayEntries(date).map(entry => ({ date: entry.date, createdAt: entry.createdAt, block: entry.block, answer: entry.answer, note: String(entry.note || '').slice(0, 300) }))
+  };
+}
+async function ensureDaySummary(date) {
+  if (daySummaryRequests.has(date)) return;
+  daySummaryRequests.add(date);
+  if (!summaryCache(date)) { state.daySummaries[date] = { text: localDaySummary(date), source: 'local', at: new Date().toISOString() }; save(); }
+  if (!API_ENDPOINT) return;
+  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(API_ENDPOINT, { method: 'POST', cache: 'no-store', signal: controller.signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(daySummaryPayload(date)) });
+    const body = response.ok ? await response.json().catch(() => ({})) : {};
+    if (typeof body.summary === 'string' && body.summary.trim()) { state.daySummaries[date] = { text: body.summary.trim().slice(0, 720), source: body.source === 'gpt-5.6' ? 'gpt-5.6' : 'local', at: new Date().toISOString() }; save(); if (state.view === 'daystory' && state.statsDate === date) render(); }
+  } catch {}
+  finally { clearTimeout(timeout); }
+}
+function journalCalendarCell(date, day, future) {
+  const entries = dayEntries(date); const kept = dayKeptCount(date); const cache = summaryCache(date); const written = entries.some(entry => entry.note) || Boolean(cache); const photos = entries.some(entry => entry.photo);
+  const visible = journalCalendarFilter === 'all' ? kept > 0 : journalCalendarFilter === 'written' ? written : photos;
+  const selected = date === (state.statsDate || today()); const classes = ['journal-calendar-cell', selected ? 'selected' : '', future ? 'future' : ''].filter(Boolean).join(' ');
+  const button = `<button class="${classes}" data-calendar-date="${date}" ${future ? 'disabled' : ''} aria-label="${future ? 'Future' : 'Open'} ${new Date(`${date}T12:00:00`).toLocaleDateString([], { month: 'long', day: 'numeric' })}"><strong>${day}</strong><i class="cal-dot ${visible ? `kept-${Math.min(4, Math.max(1, kept))}` : 'dot-hidden'}"></i></button>`;
+  return button;
+}
+function journalCalendarView() {
+  const { year, month } = calendarMonthParts(); const first = new Date(year, month, 1); const count = new Date(year, month + 1, 0).getDate(); const mondayLead = (first.getDay() + 6) % 7; const cells = [];
+  for (let index = 0; index < mondayLead; index += 1) cells.push('<span class="journal-calendar-blank" aria-hidden="true"></span>');
+  for (let day = 1; day <= count; day += 1) { const date = calendarDateKey(year, month, day); cells.push(journalCalendarCell(date, day, date > today())); }
+  while (cells.length % 7) cells.push('<span class="journal-calendar-blank" aria-hidden="true"></span>');
+  const monthEntries = state.journal.filter(entry => entry.date?.startsWith(journalCalendarMonth)); const lived = Array.from({ length: count }, (_, index) => calendarDateKey(year, month, index + 1)).filter(date => date <= today()); const totalKept = lived.reduce((sum, date) => sum + dayKeptCount(date), 0); const percentage = lived.length ? Math.round(totalKept / (lived.length * 7) * 100) : 0;
+  const answers = monthEntries.map(entry => String(entry.answer || entry.mood || '').trim()).filter(Boolean); const common = answers.sort((a, b) => answers.filter(value => value === b).length - answers.filter(value => value === a).length)[0] || 'Nothing yet';
+  const selected = state.statsDate && state.statsDate.startsWith(journalCalendarMonth) ? state.statsDate : today().startsWith(journalCalendarMonth) ? today() : `${journalCalendarMonth}-01`; const selectedDay = new Date(`${selected}T12:00:00`); const selectedEntries = dayEntries(selected); const selectedCache = summaryCache(selected); const previewText = selected > today() ? 'This day has not happened yet.' : summarySentence(selectedCache?.text || localDaySummary(selected)); const selectedKept = dayKeptCount(selected);
+  return `<main class="jlist-page journal-calendar-page"><header class="jlist-top"><div><strong>DAY ONE</strong><span>THE JOURNAL</span></div><button class="fab-sm" aria-label="Compose journal entry" data-nav="jcompose">+</button></header><div class="jlist-content"><div class="journal-filter" role="group" aria-label="Journal filters">${[['all', 'All'], ['written', 'Written'], ['photos', 'Photos']].map(([value, label]) => `<button class="${journalCalendarFilter === value ? 'active' : ''}" data-j-filter="${value}">${label}</button>`).join('')}</div><section class="journal-insights"><div class="journal-insights-head"><div><strong>${new Date(year, month, 1).toLocaleDateString([], { month: 'long' })}</strong><span>Insights</span></div><button data-nav="stats">See all <span aria-hidden="true">›</span></button></div><div class="journal-insight-stats"><div><span>ENTRIES</span><strong>${monthEntries.length}</strong></div><div><span>BLOCKS KEPT</span><strong>${percentage}%</strong></div><div><span>MOSTLY FELT</span><strong>${esc(common)}</strong></div></div></section><div class="journal-month-nav"><button aria-label="Previous month" data-j-month-prev>‹</button><strong>${calendarMonthLabel(journalCalendarMonth)}</strong><button aria-label="Next month" data-j-month-next>›</button></div><div class="journal-weekdays">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(day => `<span>${day}</span>`).join('')}</div><section class="journal-calendar-grid" aria-label="${esc(calendarMonthLabel(journalCalendarMonth))}">${cells.join('')}</section><div class="journal-legend"><span>quiet</span><i></i><span>full</span></div><button class="journal-preview" data-story-preview="${selected}"><div class="preview-date"><strong>${selectedDay.getDate()}</strong><span>${selectedDay.toLocaleDateString([], { month: 'long', weekday: 'long' })}</span></div><p>${esc(previewText)}</p><footer><span>${selectedKept} of 7 blocks kept</span><span>${selectedEntries.length ? 'read the day ›' : 'read the day ›'}</span></footer></button></div></main>`;
+}
+function journalListViewDiscipline() { return journalCalendarView(); }
+function dayStoryView() {
+  const date = state.statsDate || today(); const day = new Date(`${date}T12:00:00`); const kept = dayKeptCount(date); const entries = dayEntries(date); const events = storyEvents(date); const timeline = events.kept.map(event => storyEventMarkup(event)).join('') + events.missed.map(event => storyEventMarkup(event, true)).join(''); const cached = summaryCache(date); const summary = cached?.text || localDaySummary(date); const attribution = cached?.source === 'gpt-5.6' ? 'WRITTEN BY GPT-5.6 · FROM YOUR OWN RECORD' : 'COMPOSED ON THIS DEVICE · OFFLINE'; const photos = entries.filter(entry => entry.photo).length;
+  return `<main class="day-story-page"><header class="day-story-top"><span>THE JOURNAL</span><button aria-label="Close day story" data-story-close>×</button></header><div class="day-story-content"><div class="story-date-hero"><strong>${day.getDate()}</strong><span>${day.toLocaleDateString([], { month: 'long' })} · ${day.toLocaleDateString([], { weekday: 'long' })}</span></div><div class="written-day"><span class="written-stamp">${attribution}</span><p class="written-summary">${esc(summary)}</p>${entries.length ? '' : '<p class="story-empty-note">Nothing was written on this day. The book keeps the gap too.</p>'}</div><section class="story-summary"><div><span>BLOCKS KEPT</span><strong>${kept} / 7</strong></div><div><span>LINES WRITTEN</span><strong>${entries.filter(entry => entry.note).length}</strong></div><div><span>PROOF PHOTOS</span><strong>${photos}</strong></div></section><section class="story-timeline"><div class="story-section-label">THE DAY, AS IT HAPPENED</div><div class="story-spine">${timeline || '<p class="story-empty">Nothing was written on this day. The book keeps the gap too.</p>'}</div></section><button class="story-close-action" data-story-close>Back to this week</button></div></main>`;
+}
+
 function journalComposeSheet() {
   const mood = state.jMood || '';
   const moods = { Rough: '#8FA0E8', Meh: '#8FB6D6', Okay: '#EFC98E', Good: '#F6BC96', Alive: '#93C78E' };
@@ -699,6 +768,7 @@ function render() {
     document.querySelector('[data-nav="settings"]')?.setAttribute('aria-label', 'Open settings');
   }
   wire();
+  if (state.view === 'daystory') ensureDaySummary(state.statsDate || today());
   if (viewChanged) window.scrollTo(0, 0);
   lastRenderedView = state.view;
   if (displayView === 'today' || state.view === 'live' || state.view === 'rescue') timer = setInterval(updateClock, 1000);
@@ -778,6 +848,7 @@ function loadDemo() {
     { id: 'demo-task-4', text: 'Choose tomorrow\'s first move', blockId: null, done: false }
   ];
   state.holds = [{ name: 'Lunch with a friend', start: '13:00', end: '14:00' }];
+  state.daySummaries = {};
   save(); render();
 }
 function resetApp() {
@@ -923,9 +994,13 @@ function wire() {
   document.querySelectorAll('[data-story-close]').forEach(button => button.onclick = () => { state.view = 'stats'; save(); render(); });
   document.querySelectorAll('[data-j-mood]').forEach(button => button.onclick = () => { state.jText = document.querySelector('#j-text')?.value || state.jText || ''; state.jMood = button.dataset.jMood; save(); render(); });
   document.querySelectorAll('[data-j-chip]').forEach(button => button.onclick = () => { const current = document.querySelector('#j-text')?.value || state.jText || ''; state.jText = current ? `${current}\n${button.dataset.jChip}` : button.dataset.jChip; save(); render(); document.querySelector('#j-text')?.focus(); });
-  document.querySelectorAll('[data-j-save]').forEach(button => button.onclick = () => { if (button.classList.contains('off')) return; state.jText = document.querySelector('#j-text')?.value || state.jText; state.journal.push({ date: today(), createdAt: new Date().toISOString(), block: 'Journal', answer: state.jMood || 'Okay', note: state.jText }); state.jMood = ''; state.jText = ''; state.view = 'journal'; save(); render(); });
+  document.querySelectorAll('[data-j-save]').forEach(button => button.onclick = () => { if (button.classList.contains('off')) return; state.jText = document.querySelector('#j-text')?.value || state.jText; state.journal.push({ date: today(), createdAt: new Date().toISOString(), block: 'Journal', answer: state.jMood || 'Okay', note: state.jText }); delete state.daySummaries[today()]; daySummaryRequests.delete(today()); state.jMood = ''; state.jText = ''; state.view = 'journal'; save(); render(); });
   document.querySelectorAll('[data-j-date]').forEach(button => button.onclick = () => setJournalDate(button.dataset.jDate));
   document.querySelectorAll('[data-j-see-all]').forEach(button => button.onclick = () => { const latest = state.journal.at(-1)?.date || today(); setJournalDate(latest); document.querySelector('.journal-day-group')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); });
+  document.querySelectorAll('[data-j-filter]').forEach(button => button.onclick = () => { journalCalendarFilter = button.dataset.jFilter || 'all'; render(); });
+  document.querySelectorAll('[data-j-month-prev]').forEach(button => button.onclick = () => { calendarMoveMonth(-1); render(); });
+  document.querySelectorAll('[data-j-month-next]').forEach(button => button.onclick = () => { calendarMoveMonth(1); render(); });
+  document.querySelectorAll('[data-calendar-date]').forEach(button => button.onclick = () => { if (button.disabled) return; state.statsDate = button.dataset.calendarDate; save(); render(); });
   const rail = document.querySelector('[data-j-rail]');
   rail?.querySelector('.selected')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   const stack = document.querySelector('[data-j-stack]');

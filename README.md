@@ -1,22 +1,52 @@
 # DAY ONE
 
-DAY ONE is a quiet daily-discipline PWA for the OpenAI Build Week “Apps for your life” track. Its promise is simple: show up anyway.
+DAY ONE is a quiet daily-discipline PWA. It turns a person's answers into a fixed day, one block at a time, then records what actually happened.
 
-## Run it
+## Try it
 
-You can open `index.html` directly, or serve this folder over localhost so the service worker can register:
+There is no hosted demo URL checked into this repository yet. Run it locally with the commands below. The app installs as a PWA when opened from a supported browser and added to a phone home screen.
+
+## Run it locally
+
+From the project root:
 
 ```bash
 python -m http.server 4173
 ```
 
-Open `http://localhost:4173` on a phone or browser. The app stores state locally under `dayone.v1` and works without an account.
+Open http://localhost:4173. Opening `index.html` directly also renders the app, but a service worker cannot register from `file://`.
 
-## GPT-5.6 check-in
+The app stores its state locally under `dayone.v1`. It does not require an account.
 
-The app calls `/api/check-in` by default. Use a same-origin proxy for that route, or set `window.DAY_ONE_API_ENDPOINT` before `app.js` to the deployed Worker URL. The Worker returns `source: "gpt-5.6"` only after a successful OpenAI response; the UI then labels the check-in `GPT-5.6`. Network and configuration failures stay visibly `OFFLINE` and use the local fallback question bank.
+## Sample data
 
-From the Worker directory, deploy the online check-in service:
+On a fresh install, open Settings and tap **Load demo**. This seeds fourteen days of history, journal entries, proof snapshots, grouped tasks, a protected hold, and Goal Pot block effort. It gives Journal, Stats, Streak, Calm, Today, and the goal surfaces something to show.
+
+To erase local data and return to onboarding, use Settings > **Reset app**, then confirm. For a temporary onboarding walkthrough without deleting saved data, open `/?start`.
+
+## Features
+
+- Onboarding creates a fixed day from wake time, focus, and food preferences.
+- Today shows progress, streak, the next block, the day's journey, and the optional Goal Pot.
+- Live Block keeps one timer, one first move, and the block's tasks in view.
+- A block check-in asks one question, then logs the answer, note, mood, blocker, and optional proof photo.
+- The Journal is a Monday-first month calendar. A selected day opens its timeline, missed blocks, notes, and proof photos.
+- GPT-5.6 can write a short day page from the user's recorded block data. The page is cached once per date. Offline days use a deterministic local summary.
+- Calm, Tasks, Schedule, Stats, Streak, Settings, notifications, export, and calendar export are included.
+
+## GPT-5.6 check-in and day writing
+
+The browser sends POST requests to `window.DAY_ONE_API_ENDPOINT`, which defaults to `/api/check-in`. The deployed Worker can handle both the original check-in request and the journal day-writing request with `mode: "day"`.
+
+The check-in is one question at one moment. It is not a chat screen. Day writing receives block names, timestamps, answers, and notes capped at 300 characters per note. Photos are never sent to the Worker. The Worker asks GPT-5.6 for a short past-tense record and returns `source: "gpt-5.6"`. The client caches the result by date and never requests the same date twice during a session. If the network or key is unavailable, it stores a local summary and labels it `COMPOSED ON THIS DEVICE · OFFLINE`.
+
+`worker/wrangler.toml` pins:
+
+```toml
+OPENAI_MODEL = "gpt-5.6"
+```
+
+Deploy the Worker:
 
 ```bash
 cd worker
@@ -26,42 +56,33 @@ npx wrangler secret put OPENAI_API_KEY
 npx wrangler deploy
 ```
 
-`worker/wrangler.toml` already sets `OPENAI_MODEL = "gpt-5.6"`. After deploy, copy the printed `https://…workers.dev` URL into the app host before `app.js`:
+After deployment, set the Worker URL before `app.js` in `index.html`:
 
 ```html
 <script>window.DAY_ONE_API_ENDPOINT = 'https://YOUR-WORKER.YOUR-SUBDOMAIN.workers.dev';</script>
 ```
 
-For a restricted production origin, add `ALLOWED_ORIGIN` as a Worker variable in the Cloudflare dashboard or use the same secure secret command. Never put `OPENAI_API_KEY` in the app, HTML, or a checked-in `.env` file. `GET /api/check-in` is a health check and `OPTIONS` supports browser preflight.
+Never put `OPENAI_API_KEY` in the repository, HTML, or a `.env` file. `GET /` is a health check. `OPTIONS` supports browser preflight. `/api/*` is not cached by the service worker.
 
-## How I built this with Codex + GPT-5.6
+## How Codex and GPT-5.6 were used
 
-Codex accelerated the shell, state model, PWA files, responsive interface, local export, proof-photo shrinking, and the Worker boundary in one build session. The product deliberately keeps GPT-5.6 narrow: it generates one context-aware question at the moment a block ends. It is not a chat screen and it does not replace the user’s judgment. A deterministic local fallback keeps the core loop reliable offline.
+Codex produced the local state model, screen registry, render lifecycle, responsive layouts, service worker and offline cache, in-browser proof-photo resizing, Worker boundary, Goal Pot ledger, month calendar, and day-story view.
+
+GPT-5.6 was used for the block timing model, product decisions about what DAY ONE refuses to do, check-in prompt design, and the optional journal day-writing response. The app does not present GPT-5.6 as a general chat assistant.
 
 ## Product decisions
 
-- 70% of blocks counts as a day, with a humane streak model.
-- Late starts do not create an automatic loss.
+- Seventy percent of blocks counts as a day.
+- A late start is not an automatic loss.
+- Streaks are humane and allow recovery.
 - Proof photos are optional, resized in the browser, and stored locally.
-- No accounts, analytics, or paid dependencies.
+- There are no accounts, analytics, or paid dependencies.
+- The Goal Pot is a local derived ledger. It does not hold money or make transfers.
 
-MIT License.
+## Privacy
 
-## Feature tour
+Proof photos stay on the device and are never sent to the Worker. If GPT-5.6 day writing is enabled, the app sends the selected day’s block names, timestamps, answers, and short notes to the Worker for that one response. The Worker does not receive photos. All other app state remains in local storage unless the user explicitly exports it.
 
-- **Onboarding and plan generation:** three simple choices create a fixed, personal day. An optional Goal Pot gives each completed block a small, honest amount toward something real.
-- **Today and Live Block:** Today shows the one live or next block. Opening it enters a quiet focus screen with a timer, a first move, checkable block tasks, and a breakfast card when relevant.
-- **Check-in and journal:** after a block, GPT-5.6 generates one contextual reflection question when the Worker is available. The offline question bank keeps the loop usable without a network. Entries can include a mood, note, blockers, and optional proof.
-- **Calm Layer:** a private place to set an intention, choose available energy, protect fixed time, rebalance flexible blocks, start a ten-minute rescue, or close the day gently.
-- **Tasks, schedule, streaks, and stats:** tasks can be assigned to blocks, the schedule can be adjusted, streaks celebrate returns rather than perfection, and weekly stats describe patterns in plain language.
-- **Journal book and Goal Pot:** the journal turns daily proof into an editorial record. The Goal Pot is a local, derived ledger only; it never claims to hold money and requires the user to make any real transfer themselves.
+## License
 
-## Demo and reset
-
-For a submission walkthrough, finish onboarding and open **Settings**:
-
-- **Load demo** seeds fourteen days of journal entries with local proof snapshots, day history, grouped tasks, a protected hold, and Goal Pot block effort so the Journal, Tasks, Stats, Streak, Calm, and Today goal surfaces immediately have a story to show.
-- **Reset app** is a deliberate two-tap action that erases local app data and returns permanently to the first onboarding screen.
-- The evaluator shortcut [/?start](http://localhost:4181/?start) opens onboarding for a temporary fresh walkthrough without deleting saved data.
-
-Settings includes a backend health check. It reads `window.DAY_ONE_API_ENDPOINT` when provided, otherwise it checks `/api/check-in`; a static file server will correctly report that endpoint as unavailable until the Worker is deployed or proxied.
+MIT. See [LICENSE](LICENSE).

@@ -1,6 +1,14 @@
 # DAY ONE
 
-DAY ONE is a quiet daily-discipline PWA. It turns a person's answers into a fixed day, one block at a time, then records what actually happened.
+Hi, I’m Santhosh. I built DAY ONE because I procrastinate. Badly.
+
+It’s not that I don’t want to do the work. I sit there and think, “I’ll start at eleven.” Then it’s eleven fifteen, so I decide I’ll start at twelve. The whole day goes like that. Nothing gets done, and I still feel tired at the end of it.
+
+Every productivity app I tried gave me a longer list. A longer list is the opposite of what I need.
+
+DAY ONE gives me a day I can follow without planning it again and again. I choose when I wake up and what matters. The app turns that into blocks. I only have to deal with the next one.
+
+When a block ends, I answer one question. That record becomes part of a private journal, so I can see what I actually did instead of guessing how the day went.
 
 ## Try it
 
@@ -24,14 +32,14 @@ On a fresh install, open Settings and tap **Load demo**. This seeds fourteen day
 
 To erase local data and return to onboarding, use Settings > **Reset app**, then confirm. For a temporary onboarding walkthrough without deleting saved data, open `/?start`.
 
-## Features
+## What the app does
 
 - Onboarding creates a fixed day from wake time, focus, and food preferences.
-- Today shows progress, streak, the next block, the day's journey, and the optional Goal Pot.
+- Today shows progress, streak, the next block, and the optional Goal Pot.
 - Live Block keeps one timer, one first move, and the block's tasks in view.
 - A block check-in asks one question, then logs the answer, note, mood, blocker, and optional proof photo.
 - The Journal is a Monday-first month calendar. A selected day opens its timeline, missed blocks, notes, and proof photos.
-- GPT-5.6 can write a short day page from the user's recorded block data. The page is cached once per date. Offline days use a deterministic local summary.
+- GPT-5.6 writes a short record of a day from the information I entered. The result is cached by date. Offline days use a local summary.
 - Calm, Tasks, Schedule, Stats, Streak, Settings, notifications, export, and calendar export are included.
 
 ## GPT-5.6 check-in and day writing

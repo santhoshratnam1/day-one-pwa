@@ -60,7 +60,7 @@ MIT License.
 
 For a submission walkthrough, finish onboarding and open **Settings**:
 
-- **Load demo** seeds fourteen days of journal entries, day history, grouped tasks, and a protected hold so the Journal, Tasks, Stats, Streak, and Calm screens immediately have a story to show.
+- **Load demo** seeds fourteen days of journal entries with local proof snapshots, day history, grouped tasks, a protected hold, and Goal Pot block effort so the Journal, Tasks, Stats, Streak, Calm, and Today goal surfaces immediately have a story to show.
 - **Reset app** is a deliberate two-tap action that erases local app data and returns permanently to the first onboarding screen.
 - The evaluator shortcut [/?start](http://localhost:4181/?start) opens onboarding for a temporary fresh walkthrough without deleting saved data.
 

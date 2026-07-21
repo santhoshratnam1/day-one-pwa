@@ -1,5 +1,5 @@
-const CACHE = 'dayone-v60';
-const ASSETS = ['./', './index.html', './app.css?v=dayone47', './app.js?v=dayone46', './manifest.webmanifest'];
+const CACHE = 'dayone-v61';
+const ASSETS = ['./', './index.html', './app.css?v=dayone48', './app.js?v=dayone47', './manifest.webmanifest'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', event => {
